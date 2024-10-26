@@ -70,9 +70,9 @@ email_receivers = ['receiver1@example.com', 'receiver2@example.com']
 
 # Dates to track in the format 'DD-MM-YYYY · HH:MM'
 dates_to_track = [
-    '23-12-2024 · 16:55',
-    '29-12-2024 · 16:45',
-    '30-12-2024 · 16:55'
+    '13-12-2024 · 16:23',
+    '19-12-2024 · 16:33',
+    '10-12-2024 · 16:51'
 ]
 
 price_threshold = 500  # Alert when price is below this value

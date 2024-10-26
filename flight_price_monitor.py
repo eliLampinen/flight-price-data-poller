@@ -134,15 +134,17 @@ def parse_flight_data(html_content):
     print(f"Parsing {len(flight_rows)} flights from the HTML content.")
     
     for row in flight_rows:
-        date_info = row.select_one('div.departy p:nth-of-type(2)').text.strip()
-        destination_info = row.select_one('div.destiny p:nth-of-type(2)').text.strip()
+        departure_info = row.select_one('div.departy p:nth-of-type(1)').text.strip()  # Extract departure place
+        date_info = row.select_one('div.departy p:nth-of-type(2)').text.strip()  # Extract flight date and time
+        destination_info = row.select_one('div.destiny p:nth-of-type(2)').text.strip()  # Extract destination
         price_info = row.select_one('div.pricey p.current-price').text.strip()
 
         hurry_element = row.select_one('div.hurry p')
         hurry_text = hurry_element.text.strip() if hurry_element else None
 
-        price = int(price_info.split(' ')[0])
+        price = int(price_info.split(' ')[0])  # Extract price as integer
         flight = {
+            'departure_info': departure_info,
             'date_info': date_info,
             'destination_info': destination_info,
             'price': price,
@@ -153,6 +155,7 @@ def parse_flight_data(html_content):
     
     print(f"Total flights parsed: {len(flights)}")
     return flights
+
 
 def load_previous_flights():
     if os.path.exists(DATA_FILE):
@@ -212,13 +215,13 @@ def send_email(alerts):
     except Exception as e:
         print(f"Failed to send email: {e}")
 
-def log_flight_price(flight_date, flight_time, destination, price):
+def log_flight_price(flight_date, flight_time, departure, destination, price):
     current_time = datetime.now()
     log_date = current_time.strftime("%Y-%m-%d")
     log_time = current_time.strftime("%H:%M:%S")
 
     with open(CSV_FILE, 'a', newline='', encoding='utf-8') as csvfile:
-        fieldnames = ['log_date', 'log_time', 'flight_date', 'flight_time', 'destination', 'price']
+        fieldnames = ['log_date', 'log_time', 'flight_date', 'flight_time', 'departure', 'destination', 'price']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
         if csvfile.tell() == 0:
@@ -229,6 +232,7 @@ def log_flight_price(flight_date, flight_time, destination, price):
             'log_time': log_time,
             'flight_date': flight_date,
             'flight_time': flight_time,
+            'departure': departure,
             'destination': destination,
             'price': price
         })
@@ -255,6 +259,7 @@ def main():
 
     for flight in flights:
         date_info = flight['date_info']
+        departure = flight['departure_info']
         flight_date, flight_time = date_info.split(' · ')
         price = flight['price']
         hurry_text = flight['hurry_text']
@@ -264,7 +269,7 @@ def main():
 
         # Only log flights that are in dates_to_track
         if date_info in dates_to_track:
-            log_flight_price(flight_date, flight_time, destination_info, price)
+            log_flight_price(flight_date, flight_time, departure, destination_info, price)
 
         current_flights[flight_key] = {
             'price': price,

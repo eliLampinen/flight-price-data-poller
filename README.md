@@ -40,8 +40,8 @@ The **Flight Poller** is a Python script designed to monitor flight prices from 
 1. **Clone the Repository**
 
    ```bash
-   git clone https://github.com/elilampinen/flight-poller.git
-   cd flight-poller
+   git clone https://github.com/elilampinen/flight-price-data-poller.git
+   cd flight-price-data-poller
    ```
 
 2. **Create a Virtual Environment (Optional but Recommended)**
@@ -88,7 +88,7 @@ env = 'prod'  # Set to 'dev' for development or 'prod' for production
 To start monitoring flight prices, simply run:
 
 ```bash
-python flight_poller.py
+python flight_price_monitor.py
 ```
 
 The script will:
@@ -105,7 +105,7 @@ For continuous monitoring, it's recommended to set up a scheduled task or cron j
 
 ```bash
 # Run every hour
-0 * * * * /path/to/your/venv/bin/python /path/to/flight_poller.py
+0 * * * * /path/to/your/venv/bin/python /path/to/flight_price_monitor.py
 ```
 
 **Windows (Task Scheduler)**:
@@ -114,7 +114,7 @@ For continuous monitoring, it's recommended to set up a scheduled task or cron j
 
 ## Data Visualization (Optional)
 
-There is an optional script available to visualize the flight price data over time. This script can be used to generate plots for analysis after collecting data for a period of 1-3 months.
+There is an optional script available to visualize the flight price data over time. This script can be used to generate plots for analysis.
 
 To use the visualizer script:
 
@@ -122,7 +122,12 @@ To use the visualizer script:
 python visualize_prices.py
 ```
 
-This will generate visualizations of the price trends for each flight date being monitored.
+This will generate visualizations of the price trends for each flight date being monitored. This includes seperate .png files for every flight you are monitoring and html page for everything.
+
+Example html file
+
+![Flight Price Visualization Example](./flight_price_visualize_example_html.png)
+
 
 ## Error Handling
 

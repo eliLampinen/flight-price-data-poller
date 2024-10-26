@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import seaborn as sns
 import os
+import re
 
 # Set the style for seaborn
 sns.set(style="whitegrid")
@@ -30,11 +31,16 @@ df = df.sort_values(by=['flight_datetime', 'timestamp'])
 plots_dir = os.path.join(script_dir, 'plots')
 os.makedirs(plots_dir, exist_ok=True)
 
+# Function to sanitize strings for filenames
+def sanitize_filename(s):
+    # Remove any characters that are not alphanumeric or underscore
+    return re.sub(r'[^\w\-]', '_', s)
+
 # Plot the price trends for each flight
 def plot_price_trends():
-    flights_grouped = df.groupby('flight_datetime')
+    flights_grouped = df.groupby(['flight_datetime', 'departure', 'destination'])
 
-    for flight_date, data in flights_grouped:
+    for (flight_datetime, departure, destination), data in flights_grouped:
         # Create the plot
         plt.figure(figsize=(12, 6))
 
@@ -61,7 +67,7 @@ def plot_price_trends():
                      fontsize=12, color='red')
 
         # Set the title and labels
-        plt.title(f"Price Trend for Flight on {flight_date.strftime('%Y-%m-%d %H:%M')}", fontsize=16)
+        plt.title(f"Price Trend for Flight on {flight_datetime.strftime('%Y-%m-%d %H:%M')}\nFrom {departure} to {destination}", fontsize=16)
         plt.xlabel("Time of Check", fontsize=14)
         plt.ylabel("Price (€)", fontsize=14)
 
@@ -80,11 +86,15 @@ def plot_price_trends():
         # Tight layout
         plt.tight_layout()
 
+        # Sanitize departure and destination for filename
+        departure_safe = sanitize_filename(departure)
+        destination_safe = sanitize_filename(destination)
+
         # Save the plot as a PNG file
-        plot_filename = os.path.join(plots_dir, f"flight_price_trend_{flight_date.strftime('%Y-%m-%d_%H-%M')}.png")
+        plot_filename = os.path.join(plots_dir, f"flight_price_trend_{flight_datetime.strftime('%Y-%m-%d_%H-%M')}_{departure_safe}_to_{destination_safe}.png")
         plt.savefig(plot_filename)
         plt.close()  # Close the figure to free memory
-        print(f"Saved plot for {flight_date.strftime('%Y-%m-%d %H:%M')} as {plot_filename}")
+        print(f"Saved plot for flight on {flight_datetime.strftime('%Y-%m-%d %H:%M')} from {departure} to {destination} as {plot_filename}")
 
 # Generate an HTML report to compile all plots
 def generate_html_report():
@@ -94,9 +104,19 @@ def generate_html_report():
     html_content += "<h1>Flight Price Trends Report</h1>"
 
     for plot_file in plot_files:
-        flight_datetime_str = plot_file.replace('flight_price_trend_', '').replace('.png', '').replace('_', ' ')
-        html_content += f"<h2>Flight on {flight_datetime_str}</h2>"
-        html_content += f'<img src="plots/{plot_file}" alt="Price Trend for Flight on {flight_datetime_str}" style="max-width:100%; height:auto;">'
+        # Extract flight_datetime, departure, and destination from filename
+        # Assuming filenames are in the format: flight_price_trend_YYYY-MM-DD_HH-MM_departure_to_destination.png
+        match = re.match(r'flight_price_trend_(.*?)_(.*?)_to_(.*?).png', plot_file)
+        if match:
+            flight_datetime_str = match.group(1).replace('_', ' ')
+            departure = match.group(2).replace('_', ' ')
+            destination = match.group(3).replace('_', ' ')
+            flight_info = f"Flight on {flight_datetime_str} from {departure} to {destination}"
+        else:
+            flight_info = plot_file  # If the filename doesn't match, just use the filename
+
+        html_content += f"<h2>{flight_info}</h2>"
+        html_content += f'<img src="plots/{plot_file}" alt="{flight_info}" style="max-width:100%; height:auto;">'
 
     html_content += "</body></html>"
 

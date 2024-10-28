@@ -280,7 +280,7 @@ def main():
         prev_price = prev_flight_data.get('price')
         hurry_alert_sent = prev_flight_data.get('hurry_alert_sent', False)
 
-        if hurry_text and not hurry_alert_sent:
+        if hurry_text and not hurry_alert_sent and date_info in dates_to_track:
             alerts.append({'type': 'hurry', 'flight': flight})
             current_flights[flight_key]['hurry_alert_sent'] = True
         else:

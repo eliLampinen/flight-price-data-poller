@@ -12,22 +12,16 @@ from datetime import datetime
 from configFile import (
     email_sender,
     email_password,
-    email_receivers,
     dates_to_track,
-    price_threshold,
     url,
     host,
     env
 )
-
 import csv
-from datetime import datetime
 
 # Constants
-# Get the directory of the current script
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-# Define file paths relative to the script's directory
 DATA_FILE = os.path.join(script_dir, 'previous_flights.json')
 API_ERROR_LOG_FILE = os.path.join(script_dir, 'api_error_log.json')
 GENERAL_ERROR_LOG_FILE = os.path.join(script_dir, 'error_log.txt')
@@ -40,33 +34,39 @@ def log_error_to_file(error_message):
         error_log_file.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {error_message}\n")
     print(f"Error logged: {error_message}")
 
+
 def has_future_dates():
     today = datetime.now().date()
     print("Checking future dates...")
-    for date_str in dates_to_track:
-        date_part = date_str.split('·')[0].strip()
+    for flight_str in dates_to_track:
+        # Expected example:
+        # "20-01-2025 · 16:55 | target.email@example.com | OUL | LPA | 1600"
         try:
-            flight_date = datetime.strptime(date_part, '%d-%m-%Y').date()
+            parts = flight_str.split(" | ")
+            if len(parts) != 5:
+                raise ValueError("Incorrect number of fields.")
+            date_time_part = parts[0].strip()  # e.g., "20-01-2025 · 16:55"
+            just_date_str = date_time_part.split('·')[0].strip()  # e.g., "20-01-2025"
+            flight_date = datetime.strptime(just_date_str, '%d-%m-%Y').date()
             if flight_date >= today:
                 print(f"Future date found: {flight_date}")
                 return True
-        except ValueError:
-            print(f"Invalid date format: {date_part}")
+        except (ValueError, IndexError):
+            print(f"Invalid format in dates_to_track entry: {flight_str}")
             continue
     print("No future dates to track.")
     return False
 
-def fetch_flight_data():
+
+def fetch_flight_data(custom_url):
     headers = {
         'Host': host,
         'User-Agent': 'curl/8.5.0',
         'Accept': '*/*',
     }
-
-    print(f"Fetching flight data from URL: {url}")
-    
+    print(f"Fetching flight data from URL: {custom_url}")
     try:
-        response = requests.get(url, headers=headers)
+        response = requests.get(custom_url, headers=headers)
         if response.status_code != 200:
             print(f"Error: Failed to fetch data. Status code: {response.status_code}, Response text: {response.text}")
             handle_api_error(response.status_code)
@@ -81,10 +81,10 @@ def fetch_flight_data():
         handle_api_error(str(e))
         return None
 
+
 def handle_api_error(error_message):
     error_logged_today = False
     today_str = datetime.now().strftime('%Y-%m-%d')
-
     if os.path.exists(API_ERROR_LOG_FILE):
         with open(API_ERROR_LOG_FILE, 'r') as f:
             error_log = json.load(f)
@@ -93,56 +93,51 @@ def handle_api_error(error_message):
                 error_logged_today = True
     else:
         error_log = {}
-
     if not error_logged_today:
         send_error_email(error_message)
         error_log['last_error_date'] = today_str
         with open(API_ERROR_LOG_FILE, 'w') as f:
             json.dump(error_log, f)
 
+
 def send_error_email(error_message):
+    # Using email_sender as recipient for error emails
     msg = MIMEMultipart()
     msg['From'] = email_sender
-    msg['To'] = ', '.join(email_receivers)
+    msg['To'] = email_sender
     msg['Date'] = formatdate(localtime=True)
     msg['Subject'] = "Flight Monitor Error Alert"
-
     body = f"""
-    An error occurred while fetching flight data:
+An error occurred while fetching flight data:
 
-    Error: {error_message}
+Error: {error_message}
 
-    This is a notification to inform you of the issue. The script will attempt to run again in the next scheduled interval.
+This is a notification to inform you of the issue.
     """
-
     msg.attach(MIMEText(body, 'plain'))
-
     try:
         server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
         server.login(email_sender, email_password)
-        server.sendmail(email_sender, email_receivers, msg.as_string())
+        server.sendmail(email_sender, email_sender, msg.as_string())
         server.quit()
         print("Error email sent.")
     except Exception as e:
         print(f"Failed to send error email: {e}")
 
+
 def parse_flight_data(html_content):
     soup = BeautifulSoup(html_content, 'html.parser')
     flight_rows = soup.select('a.lms-row')
     flights = []
-
     print(f"Parsing {len(flight_rows)} flights from the HTML content.")
-    
     for row in flight_rows:
-        departure_info = row.select_one('div.departy p:nth-of-type(1)').text.strip()  # Extract departure place
-        date_info = row.select_one('div.departy p:nth-of-type(2)').text.strip()  # Extract flight date and time
-        destination_info = row.select_one('div.destiny p:nth-of-type(2)').text.strip()  # Extract destination
+        departure_info = row.select_one('div.departy p:nth-of-type(1)').text.strip()
+        date_info = row.select_one('div.departy p:nth-of-type(2)').text.strip()
+        destination_info = row.select_one('div.destiny p:nth-of-type(2)').text.strip()
         price_info = row.select_one('div.pricey p.current-price').text.strip()
-
         hurry_element = row.select_one('div.hurry p')
         hurry_text = hurry_element.text.strip() if hurry_element else None
-
-        price = int(price_info.split(' ')[0])  # Extract price as integer
+        price = int(''.join(filter(str.isdigit, price_info)))
         flight = {
             'departure_info': departure_info,
             'date_info': date_info,
@@ -152,7 +147,6 @@ def parse_flight_data(html_content):
             'hurry_text': hurry_text
         }
         flights.append(flight)
-    
     print(f"Total flights parsed: {len(flights)}")
     return flights
 
@@ -161,72 +155,65 @@ def load_previous_flights():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, 'r') as f:
             return json.load(f)
-    else:
-        return {}
+    return {}
+
 
 def save_current_flights(flights_data):
     with open(DATA_FILE, 'w') as f:
         json.dump(flights_data, f)
 
-def send_email(alerts):
-    if not alerts:
-        print("No alerts to send.")
-        return
 
-    print(f"Preparing to send {len(alerts)} alerts via email.")
-    
+def send_individual_email(alert, target_email):
     msg = MIMEMultipart()
     msg['From'] = email_sender
-    msg['To'] = ', '.join(email_receivers)
+    msg['To'] = target_email
     msg['Date'] = formatdate(localtime=True)
-    msg['Subject'] = "Flight Alerts"
+    msg['Subject'] = "Flight Alert Notification"
+    if alert['type'] == 'price_drop':
+        body = f"""
+Price Drop Alert:
 
-    body = ""
+Flight Date: {alert['flight']['date_info']}
+New Price: {alert['flight']['price']} euros
+Destination: {alert['flight']['destination_info']}
+Booking Link: {alert['flight']['link']}
 
-    for alert in alerts:
-        if alert['type'] == 'price_drop':
-            body += f"""
-            Price Drop Alert:
-            Flight Date: {alert['flight']['date_info']}
-            New Price: {alert['flight']['price']} euros
-            Destination: {alert['flight']['destination_info']}
-            Booking Link: {alert['flight']['link']}
-            ----------------------------------------
-            """
-        elif alert['type'] == 'hurry':
-            body += f"""
-            Hurry Alert:
-            Limited Seats for Flight on {alert['flight']['date_info']}
-            Seats Left: {alert['flight']['hurry_text']}
-            Price: {alert['flight']['price']} euros
-            Destination: {alert['flight']['destination_info']}
-            Booking Link: {alert['flight']['link']}
-            ----------------------------------------
-            """
+----------------------------------------
+"""
+    elif alert['type'] == 'hurry':
+        body = f"""
+Hurry Alert:
 
+Limited Seats for Flight on {alert['flight']['date_info']}
+Seats Left: {alert['flight']['hurry_text']}
+Price: {alert['flight']['price']} euros
+Destination: {alert['flight']['destination_info']}
+Booking Link: {alert['flight']['link']}
+
+----------------------------------------
+"""
+    else:
+        body = "Unknown alert type."
     msg.attach(MIMEText(body, 'plain'))
-
     try:
         server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
         server.login(email_sender, email_password)
-        server.sendmail(email_sender, email_receivers, msg.as_string())
+        server.sendmail(email_sender, target_email, msg.as_string())
         server.quit()
-        print("Email sent with all alerts.")
+        print(f"Alert email sent to {target_email}.")
     except Exception as e:
-        print(f"Failed to send email: {e}")
+        print(f"Failed to send email to {target_email}: {e}")
+
 
 def log_flight_price(flight_date, flight_time, departure, destination, price):
     current_time = datetime.now()
     log_date = current_time.strftime("%Y-%m-%d")
     log_time = current_time.strftime("%H:%M:%S")
-
     with open(CSV_FILE, 'a', newline='', encoding='utf-8') as csvfile:
         fieldnames = ['log_date', 'log_time', 'flight_date', 'flight_time', 'departure', 'destination', 'price']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
         if csvfile.tell() == 0:
             writer.writeheader()
-
         writer.writerow({
             'log_date': log_date,
             'log_time': log_time,
@@ -237,62 +224,101 @@ def log_flight_price(flight_date, flight_time, departure, destination, price):
             'price': price
         })
 
+
+def get_flight_configs_grouped():
+    """
+    Groups flight configurations by (airport, destination).
+    Returns a dictionary where keys are (airport, destination) tuples and values are lists of flight configs.
+    """
+    grouped_configs = {}
+    for flight_str in dates_to_track:
+        parts = flight_str.split(" | ")
+        if len(parts) != 5:
+            print(f"Skipping invalid entry: {flight_str}")
+            continue
+        fc_date_time = parts[0].strip()   # "DD-MM-YYYY · HH:MM"
+        # Split emails by comma and strip extra spaces
+        fc_email_str = parts[1].strip()
+        fc_emails = [email.strip() for email in fc_email_str.split(',')]
+        fc_airport = parts[2].strip()
+        fc_destination = parts[3].strip()
+        fc_threshold = parts[4].strip()
+        try:
+            threshold = int(fc_threshold)
+        except ValueError:
+            print(f"Invalid price threshold in entry: {flight_str}")
+            continue
+        config = {
+            'date_time': fc_date_time,
+            'emails': fc_emails,
+            'airport': fc_airport,
+            'destination': fc_destination,
+            'price_threshold': threshold
+        }
+        key = (fc_airport, fc_destination)
+        grouped_configs.setdefault(key, []).append(config)
+    return grouped_configs
+
+
 def main():
     if env != "dev":
-        time.sleep(random.uniform(123, 1231))
-        print(f"Running in {env} environment. Delayed start.")
-
+        delay = random.uniform(123, 1231)
+        time.sleep(delay)
+        print(f"Running in {env} environment. Delayed start of {delay:.2f} seconds.")
     if not has_future_dates():
         print("No future dates available for tracking. Exiting.")
         return
-
-    html_content = fetch_flight_data()
-    if html_content is None:
-        print("No HTML content fetched. Exiting.")
-        return
-
-    flights = parse_flight_data(html_content)
     previous_flights = load_previous_flights()
     current_flights = {}
-
-    alerts = []
-
-    for flight in flights:
-        date_info = flight['date_info']
-        departure = flight['departure_info']
-        flight_date, flight_time = date_info.split(' · ')
-        price = flight['price']
-        hurry_text = flight['hurry_text']
-        flight_key = date_info  
-
-        destination_info = flight['destination_info']
-
-        # Only log flights that are in dates_to_track
-        if date_info in dates_to_track:
+    grouped_configs = get_flight_configs_grouped()
+    all_alerts = []
+    for (airport, destination), configs in grouped_configs.items():
+        custom_url = url.replace("{airport}", airport).replace("{destination}", destination)
+        html_content = fetch_flight_data(custom_url)
+        if html_content is None:
+            print(f"No HTML content fetched for {airport} -> {destination}. Skipping.")
+            continue
+        flights = parse_flight_data(html_content)
+        flights_lookup = {f['date_info']: f for f in flights}
+        for config in configs:
+            date_time = config['date_time']  # e.g., "20-01-2025 · 16:55"
+            target_emails = config['emails']  # List of emails
+            price_threshold = config['price_threshold']
+            matching_flight = flights_lookup.get(date_time)
+            if not matching_flight:
+                print(f"No matching flight found for {date_time} in {airport} -> {destination}.")
+                continue
+            flight_date, flight_time = date_time.split(' · ')
+            departure = matching_flight['departure_info']
+            destination_info = matching_flight['destination_info']
+            price = matching_flight['price']
             log_flight_price(flight_date, flight_time, departure, destination_info, price)
-
-        current_flights[flight_key] = {
-            'price': price,
-            'hurry_alert_sent': False
-        }
-
-        prev_flight_data = previous_flights.get(flight_key, {})
-        prev_price = prev_flight_data.get('price')
-        hurry_alert_sent = prev_flight_data.get('hurry_alert_sent', False)
-
-        if hurry_text and not hurry_alert_sent and date_info in dates_to_track:
-            alerts.append({'type': 'hurry', 'flight': flight})
-            current_flights[flight_key]['hurry_alert_sent'] = True
-        else:
-            current_flights[flight_key]['hurry_alert_sent'] = hurry_alert_sent
-
-        if date_info in dates_to_track and price <= price_threshold:
-            current_flights[flight_key]['price'] = price
-
-            if prev_price is None or price < prev_price:
-                alerts.append({'type': 'price_drop', 'flight': flight})
-
-    send_email(alerts)
+            flight_key = f"{date_time} | {airport} | {destination}"
+            current_flights.setdefault(flight_key, {'price': price, 'hurry_alert_sent': False})
+            prev_flight_data = previous_flights.get(flight_key, {})
+            prev_price = prev_flight_data.get('price')
+            hurry_alert_sent = prev_flight_data.get('hurry_alert_sent', False)
+            if matching_flight['hurry_text'] and not hurry_alert_sent:
+                alert = {
+                    'type': 'hurry',
+                    'flight': matching_flight
+                }
+                # Append a tuple containing the alert and the list of target emails
+                all_alerts.append((alert, target_emails))
+                current_flights[flight_key]['hurry_alert_sent'] = True
+            else:
+                current_flights[flight_key]['hurry_alert_sent'] = hurry_alert_sent
+            if price <= price_threshold:
+                current_flights[flight_key]['price'] = price
+                if prev_price is None or price < prev_price:
+                    alert = {
+                        'type': 'price_drop',
+                        'flight': matching_flight
+                    }
+                    all_alerts.append((alert, target_emails))
+    for alert, target_emails in all_alerts:
+        for target_email in target_emails:
+            send_individual_email(alert, target_email)
     save_current_flights(current_flights)
 
 

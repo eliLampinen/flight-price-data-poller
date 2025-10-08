@@ -59,11 +59,29 @@ def has_future_dates():
 
 
 def fetch_flight_data(custom_url):
-    headers = {
-        'Host': host,
-        'User-Agent': 'curl/8.5.0',
-        'Accept': '*/*',
+    headers  = {
+        'scheme': 'https',
+        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'accept-encoding': 'gzip, deflate, br, zstd',
+        'accept-language': 'fi-FI,fi;q=0.5,en-US;q=0.3',
+        'cache-control': 'no-cache',
+        'pragma': 'no-cache',
+        'sec-ch-ua': '"Brave";v="141", "Not?A_Brand";v="8", "Chromium";v="141"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-fetch-dest': 'document',
+        'sec-fetch-mode': 'navigate',
+        'sec-fetch-site': 'same-origin',
+        'sec-fetch-user': '?1',
+        'sec-gpc': '1',
+        'upgrade-insecure-requests': '1',
+        'user-agent': (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/141.0.0.0 Safari/537.36'
+        )
     }
+
     print(f"Fetching flight data from URL: {custom_url}")
     try:
         response = requests.get(custom_url, headers=headers)

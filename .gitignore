@@ -1,7 +1,9 @@
 configFile.py
 __pycache__/
 /plots
+/old_plots
 flight_price_trends_report.html
 flight_prices_log.csv
 last_run.txt
 previous_flights.json
+api_error_log.json

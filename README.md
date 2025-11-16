@@ -1,7 +1,7 @@
 
 # Flight Poller
 
-The **Flight Poller** is a Python script designed to monitor flight prices from a specified URL. It checks for price drops and limited seat availability on selected flight dates and sends email alerts accordingly. Additionally, it logs flight prices over time, allowing for data visualization using an optional script.
+The **Flight Poller** monitors exact charter flights exposed via an external flight-data JSON API. Every configuration entry points to a ready-made API URL and a set of identifying fields, ensuring that the monitor can follow the precise departure you care about. Whenever the API price meets or beats your threshold the script sends an email alert and appends the observation to `flight_prices_log.csv` for later analysis.
 
 ## Table of Contents
 
@@ -17,23 +17,19 @@ The **Flight Poller** is a Python script designed to monitor flight prices from 
 
 ## Features
 
-- **Flight Monitoring**: Fetches flight data from a specified URL and monitors selected flight dates.
-- **Price Alerts**: Sends email notifications when flight prices drop below a specified threshold.
-- **Limited Seat Alerts**: Notifies when there are limited seats available for monitored flights.
-- **Data Logging**: Logs flight prices over time into a CSV file for historical tracking.
-- **Data Visualization (Optional)**: Generates visualizations of flight price trends over time.
+- **JSON API monitor**: Pulls structured data directly from a flight-data API using per-flight URLs you paste into the config.
+- **Exact flight matching**: Identify flights by id, departure date/time, or any other field returned in the payload.
+- **Smart pagination**: Automatically walks through all available API pages until the target flight is found.
+- **Price-drop alerts**: Emails configurable recipients when a fare meets your threshold and beats the previous best price (optional equal-price alerts).
+- **Historical logging**: Appends each observation to `flight_prices_log.csv`, enabling later trend analysis via the included plotting script.
 
 ## Prerequisites
 
-- Python 3.6 or higher
+- Python 3.8 or higher
 - Required Python packages:
   - `requests`
-  - `beautifulsoup4`
-  - `smtplib` (comes with Python's standard library)
-  - `email` (comes with Python's standard library)
-  - `pandas` (for data visualization)
-  - `matplotlib` (for data visualization)
-  - `seaborn` (for enhanced plots)
+   - `smtplib` / `email` (standard library for alerts)
+   - `pandas`, `matplotlib`, `seaborn` (only required when running `visualize_flight_prices.py`)
 
 ## Installation
 
@@ -59,29 +55,43 @@ The **Flight Poller** is a Python script designed to monitor flight prices from 
 
 ## Configuration
 
-Create a `configFile.py` in the root directory of the project with the following variables:
+All runtime options live in `configFile.py`. The important bits are your email credentials, the environment flag (`dev` disables the random startup delay), and the `FLIGHT_CONFIGS` list. Each entry in `FLIGHT_CONFIGS` must include:
+
+- `name`: Friendly label used for logs and alert subjects.
+- `api_url`: Full flight-data API URL you copied from the browser (the monitor overrides the `page` parameter while paging through results).
+- `match`: Dictionary of field/value pairs that uniquely identify the flight (e.g. `id`, `r1_dep_date`, `r1_dep_time`).
+- `price_threshold`: Integer threshold in euros.
+- `emails`: Either a list or comma-separated string of recipients.
+
+Additional rules:
+
+- Include both `r2_dep_date` and `r2_dep_time` inside the `match` block so the poller can differentiate return durations (7/14/21-day packages).
+
+Example snippet:
 
 ```python
-# configFile.py
-
 email_sender = 'youremail@example.com'
-email_password = 'your-email-password'
-email_receivers = ['receiver1@example.com', 'receiver2@example.com']
+email_password = 'app-password'
+env = 'dev'
 
-# Dates to track in the format 'DD-MM-YYYY · HH:MM'
-dates_to_track = [
-    '13-12-2024 · 16:23',
-    '19-12-2024 · 16:33',
-    '10-12-2024 · 16:51'
+FLIGHT_CONFIGS = [
+   {
+      "name": "OUL -> LPA | 2026-03-09",
+      "api_url": "https://api.exampleflightdata.com/flights?departure=1112&destination=291&page=1",
+      "match": {
+         "id": "3331717506",
+         "r1_dep_date": "2026-03-09",
+         "r1_dep_time": "16:55",
+         "r2_dep_date": "2026-03-30",
+         "r2_dep_time": "07:10"
+      },
+      "price_threshold": 600,
+      "emails": ["alerts@example.com"]
+   }
 ]
-
-price_threshold = 500  # Alert when price is below this value
-url = 'https://example.com/flight-data-url'
-host = 'example.com'
-env = 'prod'  # Set to 'dev' for development or 'prod' for production
 ```
 
-**Note**: Ensure that your email account allows SMTP access.
+> **Tip:** Inspect the API JSON in your browser developer tools and copy the fields that best identify the flight (id is usually sufficient). The monitor walks through every available page until the matcher succeeds.
 
 ## Usage
 
@@ -92,10 +102,10 @@ python flight_price_monitor.py
 ```
 
 The script will:
-- Fetch flight data from the specified URL.
-- Check for price drops and limited availability.
-- Send email alerts if necessary.
-- Log flight prices into a CSV file for historical tracking.
+- Iterate over every entry in `FLIGHT_CONFIGS`.
+- Page through the corresponding API endpoint until it finds the flight defined in `match`.
+- Log the latest price into `flight_prices_log.csv`.
+- Email each configured recipient when the price drops below your threshold and improves over the previous best logged price.
 
 ### Running Periodically
 
@@ -114,19 +124,13 @@ For continuous monitoring, it's recommended to set up a scheduled task or cron j
 
 ## Data Visualization (Optional)
 
-There is an optional script available to visualize the flight price data over time. This script can be used to generate plots for analysis.
-
-To use the visualizer script:
+Use `visualize_flight_prices.py` to convert the CSV into per-flight PNG plots plus a bundled HTML report:
 
 ```bash
-python visualize_prices.py
+python visualize_flight_prices.py
 ```
 
-This will generate visualizations of the price trends for each flight date being monitored. This includes seperate .png files for every flight you are monitoring and html page for everything.
-
-Example html file
-
-![Flight Price Visualization Example](./flight_price_visualize_example_html.png)
+The script groups rows by departure and destination, then plots the observed fares over time. Exported figures live in `plots/` and the summary HTML is saved as `flight_price_trends_report.html`.
 
 
 ## Error Handling

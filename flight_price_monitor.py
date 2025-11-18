@@ -339,7 +339,8 @@ def main():
         print('No flight configurations found. Exiting.')
         return
     previous_flights = load_previous_flights()
-    current_flights = {}
+    # Start from prior snapshot so transient failures do not drop state and retrigger alerts
+    current_flights = previous_flights.copy()
     total_alerts = 0
     for config in FLIGHT_CONFIGS:
         alerts_sent = process_flight_config(config, previous_flights, current_flights)
